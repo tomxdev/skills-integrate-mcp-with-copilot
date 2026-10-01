@@ -1,0 +1,8 @@
+{
+  "teachers": [
+    {
+      "username": "replace-with-teacher-username",
+      "password_hash": "pbkdf2_sha256$310000$replace-with-salt-hex$replace-with-hash-hex"
+    }
+  ]
+}
