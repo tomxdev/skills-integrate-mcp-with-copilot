@@ -3,6 +3,91 @@ document.addEventListener("DOMContentLoaded", () => {
   const activitySelect = document.getElementById("activity");
   const signupForm = document.getElementById("signup-form");
   const messageDiv = document.getElementById("message");
+  const teacherAuthButton = document.getElementById("teacher-auth-button");
+  const teacherSigninPrompt = document.getElementById("teacher-signin-prompt");
+  const loginModal = document.getElementById("teacher-login-modal");
+  const loginForm = document.getElementById("teacher-login-form");
+  const loginError = document.getElementById("teacher-login-error");
+  let teacherSession = null;
+
+  function updateTeacherControls() {
+    const isTeacher = teacherSession !== null;
+    teacherAuthButton.textContent = isTeacher
+      ? `Log out (${teacherSession.username})`
+      : "Teacher login";
+    signupForm.classList.toggle("hidden", !isTeacher);
+    teacherSigninPrompt.classList.toggle("hidden", isTeacher);
+  }
+
+  function teacherHeaders() {
+    return teacherSession
+      ? { Authorization: `Bearer ${teacherSession.access_token}` }
+      : {};
+  }
+
+  function endTeacherSession() {
+    teacherSession = null;
+    updateTeacherControls();
+    fetchActivities();
+  }
+
+  teacherAuthButton.addEventListener("click", async () => {
+    if (!teacherSession) {
+      loginError.classList.add("hidden");
+      loginModal.classList.remove("hidden");
+      document.getElementById("teacher-username").focus();
+      return;
+    }
+
+    try {
+      await fetch("/auth/logout", {
+        method: "POST",
+        headers: teacherHeaders(),
+      });
+    } finally {
+      endTeacherSession();
+    }
+  });
+
+  document.getElementById("close-login-modal").addEventListener("click", () => {
+    loginModal.classList.add("hidden");
+    loginForm.reset();
+  });
+
+  loginModal.addEventListener("click", (event) => {
+    if (event.target === loginModal) {
+      loginModal.classList.add("hidden");
+      loginForm.reset();
+    }
+  });
+
+  loginForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    loginError.classList.add("hidden");
+    const username = document.getElementById("teacher-username").value;
+    const password = document.getElementById("teacher-password").value;
+
+    try {
+      const response = await fetch("/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.detail || "Login failed");
+      }
+
+      teacherSession = result;
+      loginModal.classList.add("hidden");
+      loginForm.reset();
+      updateTeacherControls();
+      fetchActivities();
+    } catch (error) {
+      loginError.textContent = error.message || "Unable to log in";
+      loginError.classList.remove("hidden");
+    }
+  });
 
   // Function to fetch activities from API
   async function fetchActivities() {
@@ -30,7 +115,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 ${details.participants
                   .map(
                     (email) =>
-                      `<li><span class="participant-email">${email}</span><button class="delete-btn" data-activity="${name}" data-email="${email}">❌</button></li>`
+                      `<li><span class="participant-email">${email}</span>${teacherSession ? `<button class="delete-btn" data-activity="${name}" data-email="${email}" aria-label="Unregister ${email}">Remove</button>` : ""}</li>`
                   )
                   .join("")}
               </ul>
@@ -80,6 +165,7 @@ document.addEventListener("DOMContentLoaded", () => {
         )}/unregister?email=${encodeURIComponent(email)}`,
         {
           method: "DELETE",
+          headers: teacherHeaders(),
         }
       );
 
@@ -92,6 +178,7 @@ document.addEventListener("DOMContentLoaded", () => {
         // Refresh activities list to show updated participants
         fetchActivities();
       } else {
+        if (response.status === 401) endTeacherSession();
         messageDiv.textContent = result.detail || "An error occurred";
         messageDiv.className = "error";
       }
@@ -124,6 +211,7 @@ document.addEventListener("DOMContentLoaded", () => {
         )}/signup?email=${encodeURIComponent(email)}`,
         {
           method: "POST",
+          headers: teacherHeaders(),
         }
       );
 
@@ -137,6 +225,7 @@ document.addEventListener("DOMContentLoaded", () => {
         // Refresh activities list to show updated participants
         fetchActivities();
       } else {
+        if (response.status === 401) endTeacherSession();
         messageDiv.textContent = result.detail || "An error occurred";
         messageDiv.className = "error";
       }
@@ -156,5 +245,6 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // Initialize app
+  updateTeacherControls();
   fetchActivities();
 });
